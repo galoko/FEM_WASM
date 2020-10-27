@@ -1,0 +1,40 @@
+import Render from './render';
+import Simulation from './simulation';
+
+async function main(): Promise<void> {
+    const wallsSize = 4.3;
+
+    const canvas: HTMLCanvasElement = document.getElementById('scene') as HTMLCanvasElement;
+
+    const style = getComputedStyle(canvas);
+    const dpr = window.devicePixelRatio;
+    canvas.width = parseFloat(style.width) * dpr;
+    canvas.height = parseFloat(style.height) * dpr;
+
+    const render: Render = new Render(canvas, true);
+    render.setWallsSize(wallsSize);
+    await render.load();
+
+    render.setCameraPosition(2, 2, 2);
+    render.lookAtPoint(0, 0, 0);
+
+    const simulation = new Simulation();
+    await simulation.init();
+
+    simulation.setModel(render.getTetModel());
+    simulation.setWallsSize(wallsSize);
+
+    // main loop
+    let lastTime: number | undefined = undefined;
+    requestAnimationFrame(function(time: number): void {
+        const delta: number = time - (lastTime || time);
+        const stepped = simulation.process(delta);
+        if (stepped) {
+            render.updateTetModel();
+        }
+        render.draw();
+        lastTime = time;
+    });
+}
+
+main();
