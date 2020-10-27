@@ -106,7 +106,7 @@ export class Loader {
         return new Promise<ObjFile>(async (resolve, reject) => {
             const obj: ParsedObjectFile = this.parseObjFile(await this.fetchText(url));
 
-            const data = new Float32Array(obj.vertices.length * (3 + 3 + 2));
+            const data = new Float32Array(obj.faces.length * 3 * (3 + 3 + 2));
             let j = 0;
             for (let i = 0; i < obj.faces.length; i++) {
                 const face = obj.faces[i];
@@ -122,12 +122,12 @@ export class Loader {
                     data[j++] = vertex[1] * size;
                     data[j++] = vertex[2] * size;
 
-                    data[j++] = texCoord[0];
-                    data[j++] = texCoord[1];
-
                     data[j++] = normal[0];
                     data[j++] = normal[1];
                     data[j++] = normal[2];
+
+                    data[j++] = texCoord[0];
+                    data[j++] = texCoord[1];
                 }
             }
 
@@ -275,8 +275,10 @@ export class Loader {
             const tex = gl.createTexture();
             const image = new Image();
             image.onload = (): void => {
+                gl.activeTexture(gl.TEXTURE0);
                 gl.bindTexture(gl.TEXTURE_2D, tex);
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+                gl.generateMipmap(gl.TEXTURE_2D);
 
                 /*
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
@@ -294,9 +296,13 @@ export class Loader {
         });
     }
 
-    async loadShader(baseUrl: string, parameters: Array<string>): Promise<CompiledShader> {
+    async loadShader<T extends CompiledShader>(
+        type: new () => T,
+        baseUrl: string,
+        parameters: Array<string>,
+    ): Promise<T> {
         const gl = this.gl;
-        return new Promise<CompiledShader>(async (resolve, reject) => {
+        return new Promise<T>(async (resolve, reject) => {
             const vertText = await this.fetchText(`${baseUrl}.vert`);
             const fragText = await this.fetchText(`${baseUrl}.frag`);
 
@@ -332,7 +338,7 @@ export class Loader {
                 return;
             }
 
-            const result = new CompiledShader();
+            const result = new type();
             result.program = program;
 
             parameters.forEach((parameter: string): void => {

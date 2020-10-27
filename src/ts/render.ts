@@ -1,6 +1,16 @@
 import { vec2, vec3, vec4, mat4, glMatrix } from 'gl-matrix';
 import { Loader, ObjFile, TetFile, CompiledShader } from './loader';
 
+class SceneShader extends CompiledShader {
+    vertexPosition: number;
+    vertexNormal: number;
+    vertexTexCoord: number;
+
+    projection: WebGLUniformLocation;
+    view: WebGLUniformLocation;
+    tex: WebGLUniformLocation;
+}
+
 export default class Render {
     private gl: WebGLRenderingContext;
     private canvas: HTMLCanvasElement;
@@ -11,7 +21,7 @@ export default class Render {
     private donutModel: TetFile;
     private donutTexture: WebGLTexture;
 
-    private shader: CompiledShader;
+    private shader: SceneShader;
 
     private projection: mat4;
     private view: mat4;
@@ -23,7 +33,7 @@ export default class Render {
 
     constructor(canvas: HTMLCanvasElement, debug = false) {
         const attributes: object = {
-            alpha: true,
+            alpha: false,
             antialias: true,
             failIfMajorPerformanceCaveat: true,
             powerPreference: 'high-performance',
@@ -55,8 +65,6 @@ export default class Render {
 
         gl.clearColor(0x87 / 0xff, 0xce / 0xff, 0xeb / 0xff, 1);
 
-        gl.activeTexture(gl.TEXTURE0);
-
         this.resize();
         this.setupView();
     }
@@ -70,7 +78,7 @@ export default class Render {
         this.donutModel = await loader.loadTet('data/model.tet');
         this.donutTexture = await loader.loadTexture('data/model.png');
 
-        this.shader = await loader.loadShader('data/scene', [
+        this.shader = await loader.loadShader(SceneShader, 'data/scene', [
             'vertexPosition',
             'vertexNormal',
             'vertexTexCoord',
@@ -79,7 +87,44 @@ export default class Render {
             'tex',
         ]);
 
-        this.gl.useProgram(this.shader.program);
+        const gl = this.gl;
+
+        gl.useProgram(this.shader.program);
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.wallTexture);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeModel.buffer);
+
+        const SIZE_OF_VERTEX = (3 + 3 + 2) * Float32Array.BYTES_PER_ELEMENT;
+        gl.enableVertexAttribArray(this.shader.vertexPosition);
+        gl.vertexAttribPointer(
+            this.shader.vertexPosition,
+            4,
+            gl.FLOAT,
+            false,
+            SIZE_OF_VERTEX,
+            0 * Float32Array.BYTES_PER_ELEMENT,
+        );
+        gl.enableVertexAttribArray(this.shader.vertexNormal);
+        gl.vertexAttribPointer(
+            this.shader.vertexNormal,
+            3,
+            gl.FLOAT,
+            false,
+            SIZE_OF_VERTEX,
+            3 * Float32Array.BYTES_PER_ELEMENT,
+        );
+        gl.enableVertexAttribArray(this.shader.vertexTexCoord);
+        gl.vertexAttribPointer(
+            this.shader.vertexTexCoord,
+            2,
+            gl.FLOAT,
+            false,
+            SIZE_OF_VERTEX,
+            (3 + 3) * Float32Array.BYTES_PER_ELEMENT,
+        );
+
+        gl.uniform1i(this.shader.tex, 0);
     }
 
     resize(): void {
@@ -140,15 +185,12 @@ export default class Render {
 
     draw(): void {
         const gl = this.gl;
+        gl.uniformMatrix4fv(this.shader.projection, false, this.projection);
+        gl.uniformMatrix4fv(this.shader.view, false, this.view);
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        gl.bindTexture(gl.TEXTURE_2D, this.wallTexture);
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeModel.buffer);
-
-        const SIZE_OF_VERTEX = (3 + 3 + 2) * 4;
-
-        gl.drawArrays(gl.TRIANGLES, 0, this.cubeModel.triangleCount);
+        gl.drawArrays(gl.TRIANGLES, 0, this.cubeModel.triangleCount * 3);
 
         gl.finish();
     }
