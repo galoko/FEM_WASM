@@ -1,10 +1,12 @@
 import { vec2, vec3 } from 'gl-matrix';
+import { sqrDist } from 'gl-matrix/src/gl-matrix/vec2';
 
 class ParsedObjectFile {
     vertices: Array<vec3> = [];
     texCoords: Array<vec2> = [];
     normals: Array<vec3> = [];
 
+    // [[v, t, n], [v, t, n], [v, t, n]]
     faces: Array<Array<Array<number>>> = [];
 }
 
@@ -19,62 +21,108 @@ class ParsedTetFile {
     // all texCoords
     texCoords: Array<number> = [];
 
-    // indices [v, t, v, t v, t] per face
-    faces: Array<number> = [];
+    // [[v, t], [v, t], [v, t]]
+    faces: Array<Array<Array<number>>> = [];
     // indices [v, v, v, v] per tet
     tetsIndices: Array<number> = [];
 }
 
 export class TetFile {
+    // these two will go to simulation
     vertices: Float32Array;
     tetsIndices: Uint32Array;
 
-    // list of vertices that we actually need to transfer from simulation back to render
-    visibleIndices: Uint32Array;
+    // this will be just copied to GL buffer
+    texCoords: Float32Array;
 
-    visibleTexCoords: Float32Array;
+    // this will need to be calculated after vertices update
+    normals: Float32Array;
+    // temporary buffer for normal calculation
+    normalAreas: Float32Array;
 
-    // we need this to recreate visible buffers after simulation have returned the vertices
-    faces: Uint32Array;
+    // this will be used to reconstruct GL buffer
+    faces: Array<Array<Array<number>>>;
 
-    // this is recalculated each time we get updated by simlation
-    visibleVertices: Float32Array;
-    // this is recalculated also
-    visibleNormals: Float32Array;
-
+    // data buffer for gl buffer
+    vertexBufferData: Float32Array;
     vertexBuffer: WebGLBuffer;
-    texCoordBuffer: WebGLBuffer;
-    normalBuffer: WebGLBuffer;
 
     triangleCount: number;
 
-    public updateVisibleVertices(vertices: Float32Array): void {
-        for (let i = 0; i < this.visibleIndices.length; i++) {
-            const index = this.visibleIndices[i];
-
-            this.vertices[index * 3 + 0] = vertices[i * 3 + 0];
-            this.vertices[index * 3 + 1] = vertices[i * 3 + 1];
-            this.vertices[index * 3 + 2] = vertices[i * 3 + 2];
-        }
-
-        this.recalcVisibleVertices();
-        this.recalcNormals();
-    }
-
-    public recalcVisibleVertices(): void {
-        let j = 0;
-        for (let i = 0; i < this.faces.length; i += 2) {
-            const vertexIndex = this.faces[i + 0];
-
-            this.visibleVertices[j + 0] = this.vertices[vertexIndex * 3 + 0];
-            this.visibleVertices[j + 1] = this.vertices[vertexIndex * 3 + 1];
-            this.visibleVertices[j + 2] = this.vertices[vertexIndex * 3 + 2];
-            j += 3;
-        }
-    }
-
     public recalcNormals(): void {
+        for (let faceIndex = 0; faceIndex < this.faces.length; faceIndex++) {
+            const face = this.faces[faceIndex];
+
+            const x0 = this.vertices[face[0][0] * 3 + 0];
+            const y0 = this.vertices[face[0][0] * 3 + 1];
+            const z0 = this.vertices[face[0][0] * 3 + 2];
+
+            const x1 = this.vertices[face[1][0] * 3 + 0];
+            const y1 = this.vertices[face[1][0] * 3 + 1];
+            const z1 = this.vertices[face[1][0] * 3 + 2];
+
+            const x2 = this.vertices[face[2][0] * 3 + 0];
+            const y2 = this.vertices[face[2][0] * 3 + 1];
+            const z2 = this.vertices[face[2][0] * 3 + 2];
+
+            const xA = x0 - x1;
+            const yA = y0 - y1;
+            const zA = z0 - z1;
+
+            const xB = x0 - x2;
+            const yB = y0 - y2;
+            const zB = z0 - z2;
+
+            const xC = x1 - x2;
+            const yC = y1 - y2;
+            const zC = z1 - z2;
+
+            const a = Math.hypot(xA, yA, zA);
+            const b = Math.hypot(xB, yB, zB);
+            const c = Math.hypot(xC, yC, zC);
+
+            const s = (a + b + c) * 0.5;
+
+            const area = Math.sqrt(s * (s - a) * (s - b) * (s - c));
+
+            const xN = yA * zB - zA * yB;
+            const yN = zA * xB - xA * zB;
+            const zN = xA * yB - yA * xB;
+            const n = Math.hypot(xN, yN, zN);
+
+            this.normals[faceIndex * 3 + 0] = xN / n;
+            this.normals[faceIndex * 3 + 1] = yN / n;
+            this.normals[faceIndex * 3 + 2] = zN / n;
+
+            this.normalAreas[faceIndex] = area;
+        }
+
         // TODO
+    }
+
+    public copyDataToBuffer(gl: WebGLRenderingContext): void {
+        let dataIndex = 0;
+        for (let faceIndex = 0; faceIndex < this.faces.length; faceIndex++) {
+            const face = this.faces[faceIndex];
+
+            for (let faceEntryIndex = 0; faceEntryIndex < face.length; faceEntryIndex++) {
+                const faceEntry = face[faceEntryIndex];
+
+                this.vertexBufferData[dataIndex++] = this.vertices[faceEntry[0] * 3 + 0];
+                this.vertexBufferData[dataIndex++] = this.vertices[faceEntry[0] * 3 + 1];
+                this.vertexBufferData[dataIndex++] = this.vertices[faceEntry[0] * 3 + 2];
+
+                this.vertexBufferData[dataIndex++] = this.normals[faceIndex * 3 + 0];
+                this.vertexBufferData[dataIndex++] = this.normals[faceIndex * 3 + 1];
+                this.vertexBufferData[dataIndex++] = this.normals[faceIndex * 3 + 2];
+
+                this.vertexBufferData[dataIndex++] = this.texCoords[faceEntry[1] * 2 + 0];
+                this.vertexBufferData[dataIndex++] = this.texCoords[faceEntry[1] * 2 + 1];
+            }
+        }
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, this.vertexBufferData, gl.DYNAMIC_DRAW);
     }
 }
 
@@ -107,27 +155,27 @@ export class Loader {
             const obj: ParsedObjectFile = this.parseObjFile(await this.fetchText(url));
 
             const data = new Float32Array(obj.faces.length * 3 * (3 + 3 + 2));
-            let j = 0;
-            for (let i = 0; i < obj.faces.length; i++) {
-                const face = obj.faces[i];
+            let dataIndex = 0;
+            for (let faceIndex = 0; faceIndex < obj.faces.length; faceIndex++) {
+                const face = obj.faces[faceIndex];
 
-                for (let k = 0; k < face.length; k++) {
-                    const v = face[k];
+                for (let faceEntryIndex = 0; faceEntryIndex < face.length; faceEntryIndex++) {
+                    const faceEntry = face[faceEntryIndex];
 
-                    const vertex = obj.vertices[v[0]];
-                    const texCoord = obj.texCoords[v[1]];
-                    const normal = obj.normals[v[2]];
+                    const vertex = obj.vertices[faceEntry[0]];
+                    const texCoord = obj.texCoords[faceEntry[1]];
+                    const normal = obj.normals[faceEntry[2]];
 
-                    data[j++] = vertex[0] * size;
-                    data[j++] = vertex[1] * size;
-                    data[j++] = vertex[2] * size;
+                    data[dataIndex++] = vertex[0] * size;
+                    data[dataIndex++] = vertex[1] * size;
+                    data[dataIndex++] = vertex[2] * size;
 
-                    data[j++] = normal[0];
-                    data[j++] = normal[1];
-                    data[j++] = normal[2];
+                    data[dataIndex++] = normal[0];
+                    data[dataIndex++] = normal[1];
+                    data[dataIndex++] = normal[2];
 
-                    data[j++] = texCoord[0];
-                    data[j++] = texCoord[1];
+                    data[dataIndex++] = texCoord[0];
+                    data[dataIndex++] = texCoord[1];
                 }
             }
 
@@ -193,36 +241,15 @@ export class Loader {
             const result = new TetFile();
 
             result.vertexBuffer = gl.createBuffer();
-            result.triangleCount = tet.faces.length / 2;
+            result.triangleCount = tet.faces.length;
 
             result.vertices = new Float32Array(tet.vertices);
             result.tetsIndices = new Uint32Array(tet.tetsIndices);
-            result.faces = new Uint32Array(tet.faces);
-
-            const visibleIndices: Array<number> = [];
-            for (let i = 0; i < result.faces.length; i += 2) {
-                const vertexIndex = result.faces[i];
-                if (!visibleIndices.includes(vertexIndex)) {
-                    visibleIndices.push(vertexIndex);
-                }
-            }
-            result.visibleIndices = new Uint32Array(visibleIndices);
-
-            result.visibleTexCoords = new Float32Array(result.triangleCount * 2);
-            let j = 0;
-            for (let i = 0; i < result.faces.length; i += 2) {
-                const texCoordIndex = result.faces[i + 1];
-
-                const u = tet.texCoords[texCoordIndex * 2 + 0];
-                const v = tet.texCoords[texCoordIndex * 2 + 1];
-
-                result.visibleTexCoords[j + 0] = u;
-                result.visibleTexCoords[j + 1] = v;
-                j += 2;
-            }
-
-            result.visibleVertices = new Float32Array(result.triangleCount * 3);
-            result.visibleNormals = new Float32Array(result.triangleCount * 3);
+            result.faces = tet.faces;
+            result.texCoords = new Float32Array(tet.texCoords);
+            result.normals = new Float32Array(result.triangleCount * 3);
+            result.normalAreas = new Float32Array(result.triangleCount);
+            result.vertexBufferData = new Float32Array(result.triangleCount * 3 * (3 + 3 + 2));
 
             resolve(result);
         });
@@ -249,12 +276,16 @@ export class Loader {
                     break;
                 }
                 case 'f': {
-                    for (let i = 1; i < values.length; i++) {
-                        const indicesStrs: Array<string> = values[i].split('/');
+                    const face: Array<Array<number>> = [];
+                    for (let i = 0; i < 3; i++) {
+                        const indicesStrs: Array<string> = values[1 + i].split('/');
+                        const indices: Array<number> = [];
                         for (let j = 0; j < indicesStrs.length; j++) {
-                            result.faces.push(parseInt(indicesStrs[j]) - 1);
+                            indices.push(parseInt(indicesStrs[j]) - 1);
                         }
+                        face.push(indices);
                     }
+                    result.faces.push(face);
                     break;
                 }
                 case 't': {
@@ -280,12 +311,10 @@ export class Loader {
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
                 gl.generateMipmap(gl.TEXTURE_2D);
 
-                /*
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-                */
 
                 resolve(tex);
             };

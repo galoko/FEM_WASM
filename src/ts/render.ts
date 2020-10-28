@@ -57,7 +57,7 @@ export default class Render {
 
         // setup
 
-        gl.enable(gl.CULL_FACE);
+        gl.disable(gl.CULL_FACE);
         gl.frontFace(gl.CW);
         gl.cullFace(gl.BACK);
 
@@ -91,9 +91,18 @@ export default class Render {
 
         gl.useProgram(this.shader.program);
 
+        gl.uniform1i(this.shader.tex, 0);
+
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.wallTexture);
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.cubeModel.buffer);
+
+        this.donutModel.recalcNormals();
+        this.donutModel.copyDataToBuffer(this.gl);
+    }
+
+    setupBuffer(buffer: WebGLBuffer): void {
+        const gl = this.gl;
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 
         const SIZE_OF_VERTEX = (3 + 3 + 2) * Float32Array.BYTES_PER_ELEMENT;
         gl.enableVertexAttribArray(this.shader.vertexPosition);
@@ -123,12 +132,15 @@ export default class Render {
             SIZE_OF_VERTEX,
             (3 + 3) * Float32Array.BYTES_PER_ELEMENT,
         );
-
-        gl.uniform1i(this.shader.tex, 0);
     }
 
     resize(): void {
         const gl = this.gl;
+
+        const style = getComputedStyle(this.canvas);
+        const dpr = window.devicePixelRatio;
+        this.canvas.width = parseFloat(style.width) * dpr;
+        this.canvas.height = parseFloat(style.height) * dpr;
 
         gl.viewport(0.0, 0.0, this.canvas.width, this.canvas.height);
 
@@ -190,7 +202,13 @@ export default class Render {
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
+        gl.bindTexture(gl.TEXTURE_2D, this.wallTexture);
+        this.setupBuffer(this.cubeModel.buffer);
         gl.drawArrays(gl.TRIANGLES, 0, this.cubeModel.triangleCount * 3);
+
+        gl.bindTexture(gl.TEXTURE_2D, this.donutTexture);
+        this.setupBuffer(this.donutModel.vertexBuffer);
+        gl.drawArrays(gl.TRIANGLES, 0, this.donutModel.triangleCount * 3);
 
         gl.finish();
     }

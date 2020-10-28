@@ -11,7 +11,7 @@ async function main(): Promise<void> {
     canvas.width = parseFloat(style.width) * dpr;
     canvas.height = parseFloat(style.height) * dpr;
 
-    const render: Render = new Render(canvas, true);
+    const render: Render = new Render(canvas, false);
     render.setWallsSize(wallsSize);
     await render.load();
 
@@ -26,15 +26,19 @@ async function main(): Promise<void> {
 
     // main loop
     let lastTime: number | undefined = undefined;
-    requestAnimationFrame(function(time: number): void {
+    const draw = (time: number): void => {
         const delta: number = time - (lastTime || time);
         const stepped = simulation.process(delta);
         if (stepped) {
             render.updateTetModel();
         }
+        render.resize();
         render.draw();
         lastTime = time;
-    });
+
+        requestAnimationFrame(draw);
+    };
+    requestAnimationFrame(draw);
 }
 
 main();
