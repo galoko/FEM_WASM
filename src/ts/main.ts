@@ -6,11 +6,6 @@ async function main(): Promise<void> {
 
     const canvas: HTMLCanvasElement = document.getElementById('scene') as HTMLCanvasElement;
 
-    const style = getComputedStyle(canvas);
-    const dpr = window.devicePixelRatio;
-    canvas.width = parseFloat(style.width) * dpr;
-    canvas.height = parseFloat(style.height) * dpr;
-
     const render: Render = new Render(canvas, false);
     render.setWallsSize(wallsSize);
     await render.load();
