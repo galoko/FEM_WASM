@@ -72,13 +72,13 @@ export default class Render {
     async load(): Promise<void> {
         const loader: Loader = new Loader(this.gl);
 
-        this.cubeModel = await loader.loadObj('/build/data/cube.obj', this.wallsSize);
-        this.wallTexture = await loader.loadTexture('/build/data/wall.png');
+        this.cubeModel = await loader.loadObj('build/data/cube.obj', this.wallsSize);
+        this.wallTexture = await loader.loadTexture('build/data/wall.png');
 
-        this.donutModel = await loader.loadTet('/build/data/model.tet');
-        this.donutTexture = await loader.loadTexture('/build/data/model.png');
+        this.donutModel = await loader.loadTet('build/data/model.tet');
+        this.donutTexture = await loader.loadTexture('build/data/model.png');
 
-        this.shader = await loader.loadShader(SceneShader, '/build/data/scene', [
+        this.shader = await loader.loadShader(SceneShader, 'build/data/scene', [
             'vertexPosition',
             'vertexNormal',
             'vertexTexCoord',
