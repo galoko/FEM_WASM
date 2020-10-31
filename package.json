@@ -4,7 +4,7 @@
   "description": "FEM using WebGL + WASM",
   "scripts": {
     "build:release": "webpack -p",
-    "start:server": "webpack-dev-server -d --open --port 8000",
+    "start:server": "webpack-dev-server -d --open --port 3005",
     "watch:wasm": "nodemon --watch ./src/cpp/ --ext c,cpp,h,hpp --exec build-wasm"
   },
   "author": "",

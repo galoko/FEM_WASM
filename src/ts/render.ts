@@ -257,7 +257,9 @@ export default class Render {
     }
 
     updateTetModel(): void {
-        //
+        const tetModel = this.getTetModel();
+        tetModel.recalcNormals();
+        tetModel.copyDataToBuffer(this.gl);
     }
 
     setWallsSize(size: number): void {

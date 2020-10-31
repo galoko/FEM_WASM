@@ -32,6 +32,7 @@ module.exports = {
     },
     devServer: {
         contentBase: 'build',
+        host: '0.0.0.0',
         hot: true,
     },
     optimization: {

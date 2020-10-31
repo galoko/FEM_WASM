@@ -1,0 +1,8 @@
+{
+  "configurations": [
+    {
+      "includePath": ["C:/Program Files/emsdk/upstream/emscripten/system/include", "D:/YandexDisk/Projects/Code/My/FEM_WASM/include/Eigen"],
+    }
+  ],
+  "version": 4
+}

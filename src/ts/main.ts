@@ -18,6 +18,7 @@ async function main(): Promise<void> {
 
     simulation.setModel(render.getTetModel());
     simulation.setWallsSize(wallsSize);
+    simulation.commit();
 
     // main loop
     let lastTime: number | undefined = undefined;

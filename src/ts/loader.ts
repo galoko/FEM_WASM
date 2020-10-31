@@ -36,12 +36,15 @@ export class TetFile {
     texCoords: Float32Array;
 
     // this will need to be calculated after vertices update
-    normals: Float32Array;
+    faceNormals: Float32Array;
+    verticesNormals: Float32Array;
     // temporary buffer for normal calculation
-    normalAreas: Float32Array;
+    faceAreas: Float32Array;
 
     // this will be used to reconstruct GL buffer
     faces: Array<Array<Array<number>>>;
+    // list of faces connected to vertex
+    connectedFaces: Map<number, Array<number>>;
 
     // data buffer for gl buffer
     vertexBufferData: Float32Array;
@@ -90,14 +93,49 @@ export class TetFile {
             const zN = xA * yB - yA * xB;
             const n = Math.hypot(xN, yN, zN);
 
-            this.normals[faceIndex * 3 + 0] = xN / n;
-            this.normals[faceIndex * 3 + 1] = yN / n;
-            this.normals[faceIndex * 3 + 2] = zN / n;
+            this.faceNormals[faceIndex * 3 + 0] = xN / n;
+            this.faceNormals[faceIndex * 3 + 1] = yN / n;
+            this.faceNormals[faceIndex * 3 + 2] = zN / n;
 
-            this.normalAreas[faceIndex] = area;
+            this.faceAreas[faceIndex] = area;
         }
 
-        // TODO
+        for (const entry of this.connectedFaces.entries()) {
+            const vertexIndex = entry[0];
+            const connections = entry[1];
+
+            let vnx = 0;
+            let vny = 0;
+            let vnz = 0;
+            let areaSum = 0;
+
+            for (const faceIndex of connections) {
+                const fnx = this.faceNormals[faceIndex * 3 + 0];
+                const fny = this.faceNormals[faceIndex * 3 + 1];
+                const fnz = this.faceNormals[faceIndex * 3 + 2];
+                const faceArea = this.faceAreas[faceIndex];
+
+                vnx += fnx;
+                vny += fny;
+                vnz += fnz;
+
+                areaSum += faceArea;
+            }
+
+            vnx /= areaSum;
+            vny /= areaSum;
+            vnz /= areaSum;
+
+            const len = Math.hypot(vnx, vny, vnz);
+
+            vnx /= len;
+            vny /= len;
+            vnz /= len;
+
+            this.verticesNormals[vertexIndex * 3 + 0] = vnx;
+            this.verticesNormals[vertexIndex * 3 + 1] = vny;
+            this.verticesNormals[vertexIndex * 3 + 2] = vnz;
+        }
     }
 
     public copyDataToBuffer(gl: WebGLRenderingContext): void {
@@ -112,9 +150,9 @@ export class TetFile {
                 this.vertexBufferData[dataIndex++] = this.vertices[faceEntry[0] * 3 + 1];
                 this.vertexBufferData[dataIndex++] = this.vertices[faceEntry[0] * 3 + 2];
 
-                this.vertexBufferData[dataIndex++] = this.normals[faceIndex * 3 + 0];
-                this.vertexBufferData[dataIndex++] = this.normals[faceIndex * 3 + 1];
-                this.vertexBufferData[dataIndex++] = this.normals[faceIndex * 3 + 2];
+                this.vertexBufferData[dataIndex++] = this.verticesNormals[faceEntry[0] * 3 + 0];
+                this.vertexBufferData[dataIndex++] = this.verticesNormals[faceEntry[0] * 3 + 1];
+                this.vertexBufferData[dataIndex++] = this.verticesNormals[faceEntry[0] * 3 + 2];
 
                 this.vertexBufferData[dataIndex++] = this.texCoords[faceEntry[1] * 2 + 0];
                 this.vertexBufferData[dataIndex++] = this.texCoords[faceEntry[1] * 2 + 1];
@@ -247,9 +285,22 @@ export class Loader {
             result.tetsIndices = new Uint32Array(tet.tetsIndices);
             result.faces = tet.faces;
             result.texCoords = new Float32Array(tet.texCoords);
-            result.normals = new Float32Array(result.triangleCount * 3);
-            result.normalAreas = new Float32Array(result.triangleCount);
+            result.faceNormals = new Float32Array(result.triangleCount * 3);
+            result.verticesNormals = new Float32Array(result.triangleCount * 3 * 3);
+            result.faceAreas = new Float32Array(result.triangleCount);
             result.vertexBufferData = new Float32Array(result.triangleCount * 3 * (3 + 3 + 2));
+
+            result.connectedFaces = new Map();
+            for (let faceIndex = 0; faceIndex < result.faces.length; faceIndex++) {
+                for (let faceVertexIndex = 0; faceVertexIndex < 3; faceVertexIndex++) {
+                    const vertexIndex = result.faces[faceIndex][faceVertexIndex][0];
+                    const connections = result.connectedFaces.get(vertexIndex) || [];
+                    if (!connections.includes(faceIndex)) {
+                        connections.push(faceIndex);
+                    }
+                    result.connectedFaces.set(vertexIndex, connections);
+                }
+            }
 
             resolve(result);
         });
