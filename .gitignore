@@ -115,6 +115,4 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-include/Eigen/
-build/main.js
-src/wasm/
+include/Eigen/*
