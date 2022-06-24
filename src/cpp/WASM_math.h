@@ -6,7 +6,7 @@
 
 #include <malloc.h>
 
-#include "wasm_simd128_emulation.h"
+#include "wasm_simd128.h"
 
 #include "EigenTypes.h"
 
